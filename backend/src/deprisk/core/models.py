@@ -37,6 +37,17 @@ class AdvisorySeverity(StrEnum):
     UNKNOWN = "unknown"
 
 
+class DeclaredDependency(BaseModel):
+    """A dependency declared in a manifest or lockfile entry, before resolution."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(min_length=1)
+    requested_range: str
+    scope: DependencyScope
+    is_optional: bool = False
+
+
 class DependencyNode(BaseModel):
     """One physical installation of a package in a scan."""
 
@@ -49,6 +60,7 @@ class DependencyNode(BaseModel):
     scopes: frozenset[DependencyScope] = frozenset()
     is_direct: bool = False
     is_dev: bool = False
+    declared_dependencies: tuple[DeclaredDependency, ...] = ()
 
 
 class DependencyEdge(BaseModel):
@@ -83,6 +95,15 @@ class DependencyEdge(BaseModel):
         if self.resolution is EdgeResolution.MISSING and self.is_optional:
             raise ValueError("an optional dependency must use 'missing_optional', not 'missing'")
         return self
+
+
+class ParsedLockfile(BaseModel):
+    """Everything the graph builder needs from a lockfile."""
+
+    model_config = ConfigDict(frozen=True)
+
+    nodes: tuple[DependencyNode, ...]
+    root_dependencies: tuple[DeclaredDependency, ...] = ()
 
 
 class AdvisoryReference(BaseModel):

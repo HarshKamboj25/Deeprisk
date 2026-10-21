@@ -1,18 +1,47 @@
 """Dependency graph construction from parsed npm lockfile entries."""
 
+from collections.abc import Sequence
+
 from deprisk.core.lockfile import LockfileParseError
 from deprisk.core.models import (
     ROOT_INSTALL_PATH,
+    DeclaredDependency,
     DependencyEdge,
     DependencyNode,
     DependencyScope,
     EdgeResolution,
+    ParsedLockfile,
 )
+
+
+def build_graph_edges(parsed: ParsedLockfile) -> list[DependencyEdge]:
+    """Build every dependency edge for a parsed lockfile."""
+    return _build_edges(parsed.nodes, parsed.root_dependencies)
 
 
 def build_dependency_edges(
     nodes: list[DependencyNode],
     root_dependencies: dict[str, str],
+) -> list[DependencyEdge]:
+    """Build edges when root dependencies are known only as name -> requested range.
+
+    Root scope is unknown on this path. Prefer ``build_graph_edges`` with a
+    ``ParsedLockfile``, which carries each root dependency's scope.
+    """
+    root = [
+        DeclaredDependency(
+            name=name,
+            requested_range=requested_range,
+            scope=_scope_for_root_dependency(name),
+        )
+        for name, requested_range in root_dependencies.items()
+    ]
+    return _build_edges(nodes, root)
+
+
+def _build_edges(
+    nodes: Sequence[DependencyNode],
+    root_dependencies: Sequence[DeclaredDependency],
 ) -> list[DependencyEdge]:
     """Build parent-to-child edges using npm's nested node_modules layout.
 
@@ -26,15 +55,15 @@ def build_dependency_edges(
     edges: list[DependencyEdge] = []
 
     # Direct dependencies resolve exactly like any other lookup, starting at the root.
-    for name, requested_range in root_dependencies.items():
-        child = _resolve_child(ROOT_INSTALL_PATH, name, by_path)
+    for declared_root in root_dependencies:
+        child = _resolve_child(ROOT_INSTALL_PATH, declared_root.name, by_path)
         edges.append(
             _make_edge(
                 parent_path=ROOT_INSTALL_PATH,
-                dependency_name=name,
-                requested_range=requested_range,
-                scope=_scope_for_root_dependency(name),
-                is_optional=False,
+                dependency_name=declared_root.name,
+                requested_range=declared_root.requested_range,
+                scope=declared_root.scope,
+                is_optional=declared_root.is_optional,
                 child=child,
             )
         )
@@ -127,10 +156,13 @@ def _resolve_child(
 def _declared_dependencies(
     node: DependencyNode,
 ) -> list[tuple[str, str, DependencyScope, bool]]:
-    """Placeholder until parser metadata retains declared dependencies."""
-    return []
+    """Return the dependencies a package declares, as (name, range, scope, is_optional)."""
+    return [
+        (item.name, item.requested_range, item.scope, item.is_optional)
+        for item in node.declared_dependencies
+    ]
 
 
 def _scope_for_root_dependency(name: str) -> DependencyScope:
-    """Return the fallback scope for a root dependency."""
+    """Return the fallback scope when root scope is not known."""
     return DependencyScope.UNKNOWN
