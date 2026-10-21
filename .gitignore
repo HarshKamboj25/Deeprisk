@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# DepRisk runtime data
+.deprisk/
+scan-workspaces/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+
+# Recorded public API fixtures are intentionally committed
