@@ -1,41 +1,41 @@
 """Dependency graph construction from parsed npm lockfile entries."""
 
-from collections import defaultdict
-
 from deprisk.core.lockfile import LockfileParseError
-from deprisk.core.models import DependencyEdge, DependencyNode, DependencyScope
+from deprisk.core.models import (
+    ROOT_INSTALL_PATH,
+    DependencyEdge,
+    DependencyNode,
+    DependencyScope,
+    EdgeResolution,
+)
 
 
 def build_dependency_edges(
     nodes: list[DependencyNode],
     root_dependencies: dict[str, str],
 ) -> list[DependencyEdge]:
-    """Build parent-to-child edges using npm's nested node_modules layout."""
+    """Build parent-to-child edges using npm's nested node_modules layout.
+
+    Every declared dependency produces one edge. A dependency that cannot be found is
+    kept as an unresolved edge instead of being dropped.
+    """
     by_path = {node.install_path: node for node in nodes}
     if len(by_path) != len(nodes):
         raise LockfileParseError("Duplicate installation paths found")
 
-    children_by_parent: dict[str, list[DependencyNode]] = defaultdict(list)
-    for node in nodes:
-        parent_path = _parent_install_path(node.install_path)
-        children_by_parent[parent_path].append(node)
-
     edges: list[DependencyEdge] = []
 
-    # Direct dependencies are children of the root project.
+    # Direct dependencies resolve exactly like any other lookup, starting at the root.
     for name, requested_range in root_dependencies.items():
-        candidates = [node for node in children_by_parent[""] if node.name == name]
-        if not candidates:
-            continue
-
-        node = sorted(candidates, key=lambda item: item.install_path)[0]
+        child = _resolve_child(ROOT_INSTALL_PATH, name, by_path)
         edges.append(
-            DependencyEdge(
-                parent_path="",
-                child_path=node.install_path,
+            _make_edge(
+                parent_path=ROOT_INSTALL_PATH,
                 dependency_name=name,
                 requested_range=requested_range,
                 scope=_scope_for_root_dependency(name),
+                is_optional=False,
+                child=child,
             )
         )
 
@@ -44,47 +44,61 @@ def build_dependency_edges(
         declared = _declared_dependencies(parent)
 
         for child_name, requested_range, scope, is_optional in declared:
-            candidate = _resolve_child(
-                parent.install_path,
-                child_name,
-                by_path,
-            )
-            if candidate is None:
-                continue
-
+            child = _resolve_child(parent.install_path, child_name, by_path)
             edges.append(
-                DependencyEdge(
+                _make_edge(
                     parent_path=parent.install_path,
-                    child_path=candidate.install_path,
                     dependency_name=child_name,
                     requested_range=requested_range,
                     scope=scope,
                     is_optional=is_optional,
+                    child=child,
                 )
             )
 
-    unique = {(edge.parent_path, edge.child_path, edge.scope): edge for edge in edges}
+    # A parent declares each dependency name once per scope, and resolution is
+    # deterministic, so this key identifies an edge even when child_path is None.
+    unique = {(edge.parent_path, edge.dependency_name, edge.scope): edge for edge in edges}
 
-    return sorted(
-        unique.values(),
-        key=lambda edge: (
-            edge.parent_path,
-            edge.child_path,
-            edge.scope.value,
-        ),
+    return sorted(unique.values(), key=_edge_sort_key)
+
+
+def _make_edge(
+    *,
+    parent_path: str,
+    dependency_name: str,
+    requested_range: str,
+    scope: DependencyScope,
+    is_optional: bool,
+    child: DependencyNode | None,
+) -> DependencyEdge:
+    """Create a resolved edge, or an unresolved one when no install was found."""
+    if child is not None:
+        resolution = EdgeResolution.RESOLVED
+        child_path = child.install_path
+    else:
+        resolution = EdgeResolution.MISSING_OPTIONAL if is_optional else EdgeResolution.MISSING
+        child_path = None
+
+    return DependencyEdge(
+        parent_path=parent_path,
+        child_path=child_path,
+        dependency_name=dependency_name,
+        requested_range=requested_range,
+        scope=scope,
+        is_optional=is_optional,
+        resolution=resolution,
     )
 
 
-def _parent_install_path(install_path: str) -> str:
-    """Return the package installation path containing this node."""
-    parts = install_path.split("/")
-
-    if len(parts) <= 2:
-        return ""
-    if parts[-2] == "node_modules":
-        return ""
-
-    return "/".join(parts[:-2])
+def _edge_sort_key(edge: DependencyEdge) -> tuple[str, str, str, str]:
+    """Total ordering that never compares None with a string."""
+    return (
+        edge.parent_path,
+        edge.dependency_name,
+        edge.scope.value,
+        edge.child_path or "",
+    )
 
 
 def _resolve_child(
