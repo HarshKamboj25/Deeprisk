@@ -1,0 +1,8 @@
+{
+  "name": "deprisk-fixture-flags",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": { "react-dom": "18.2.0" },
+  "optionalDependencies": { "chokidar": "3.5.3" },
+  "devDependencies": { "braces": "3.0.2" }
+}
