@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from deprisk.core.models import (
@@ -14,6 +15,29 @@ from deprisk.core.models import (
 
 class LockfileParseError(ValueError):
     """Raised when an npm lockfile is invalid or unsupported."""
+
+
+@dataclass(frozen=True, slots=True)
+class ParseLimits:
+    """Upper bounds that keep a hostile lockfile from exhausting memory or time.
+
+    The defaults are hypotheses, set far above anything seen in real lockfiles, and are
+    meant to be re-evaluated in the performance evaluation. Overriding one limit keeps
+    the other defaults.
+    """
+
+    max_characters: int = 50_000_000
+    max_packages: int = 100_000
+    max_path_segments: int = 32
+    max_path_length: int = 1024
+
+    def __post_init__(self) -> None:
+        for name in ("max_characters", "max_packages", "max_path_segments", "max_path_length"):
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name} must be at least 1")
+
+
+DEFAULT_PARSE_LIMITS = ParseLimits()
 
 
 # (lockfile field, scope, is_optional)
@@ -33,25 +57,57 @@ _PACKAGE_DEPENDENCY_FIELDS: _DependencyFields = (
 )
 
 
-def _package_name_from_path(install_path: str) -> str:
-    marker = "node_modules/"
-    index = install_path.rfind(marker)
+def _is_valid_name_part(part: str) -> bool:
+    """A package name or scope: not empty, not "." or "..", no separators or control characters."""
+    return (
+        bool(part)
+        and part not in {".", ".."}
+        and not any(ch == "\\" or ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in part)
+    )
 
-    if index < 0:
-        raise LockfileParseError(f"Cannot derive package name from install path: {install_path}")
 
-    tail = install_path[index + len(marker) :]
-    parts = tail.split("/")
+def _is_valid_package_name(name: str) -> bool:
+    """True for 'name' and '@scope/name'. Any other shape is not a package name."""
+    if name.startswith("@"):
+        parts = name[1:].split("/")
+        return len(parts) == 2 and all(_is_valid_name_part(part) for part in parts)
+    return "/" not in name and _is_valid_name_part(name)
 
-    if not parts[0]:
-        raise LockfileParseError(f"Empty package name in path: {install_path}")
 
-    if parts[0].startswith("@"):
-        if len(parts) < 2 or not parts[1]:
-            raise LockfileParseError(f"Invalid scoped package path: {install_path}")
-        return f"{parts[0]}/{parts[1]}"
+def _package_names_in_path(install_path: str, limits: ParseLimits) -> list[str]:
+    """Return the package names along an install path, nearest the root first.
 
-    return parts[0]
+    A valid path is 'node_modules/<name>' repeated, where <name> is 'pkg' or '@scope/pkg'.
+    Anything else, including workspace paths such as 'packages/app', is rejected.
+    """
+    shown = _describe(install_path)
+    if len(install_path) > limits.max_path_length:
+        raise LockfileParseError(
+            f"Install path exceeds the path length limit ({limits.max_path_length}): {shown}"
+        )
+
+    parts = install_path.split("/")
+    names: list[str] = []
+    index = 0
+    while index < len(parts):
+        if parts[index] != "node_modules" or index + 1 >= len(parts):
+            raise LockfileParseError(f"Unsupported package installation path: {shown}")
+        index += 1
+        name = parts[index]
+        if name.startswith("@"):
+            if index + 1 >= len(parts):
+                raise LockfileParseError(f"Invalid scoped package path: {shown}")
+            name = f"{name}/{parts[index + 1]}"
+            index += 1
+        index += 1
+        if not _is_valid_package_name(name):
+            raise LockfileParseError(f"Invalid package name in install path: {shown}")
+        names.append(name)
+        if len(names) > limits.max_path_segments:
+            raise LockfileParseError(
+                f"Install path exceeds the path depth limit ({limits.max_path_segments}): {shown}"
+            )
+    return names
 
 
 def _is_optional_peer(peer_meta: Any, name: str) -> bool:
@@ -99,6 +155,17 @@ def _read_declared_dependencies(
     return tuple(sorted(declared, key=lambda item: (item.name, item.scope.value)))
 
 
+def _is_development_only(scopes: set[DependencyScope]) -> bool:
+    """True when development is the only way the package is reachable.
+
+    A production or optional scope means a non-development path exists, so conflicting
+    evidence never downgrades a package to dev-only. PEER describes an edge type, not
+    another way of being reachable, and is ignored.
+    """
+    non_development = {DependencyScope.PRODUCTION, DependencyScope.OPTIONAL}
+    return DependencyScope.DEVELOPMENT in scopes and not scopes & non_development
+
+
 def _top_level_key(install_path: str) -> str | None:
     """Return the package key if the path is a top-level install, else None."""
     if "/node_modules/" in install_path:
@@ -106,12 +173,31 @@ def _top_level_key(install_path: str) -> str | None:
     return install_path.removeprefix("node_modules/")
 
 
-def parse_lockfile(content: str) -> ParsedLockfile:
+def _describe(value: str) -> str:
+    """Quote a value from an untrusted file for an error message, without echoing huge text."""
+    return repr(value if len(value) <= 80 else value[:77] + "...")
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a JSON object, refusing duplicate keys instead of silently keeping the last."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise LockfileParseError(f"Duplicate JSON key: {_describe(key)}")
+        result[key] = value
+    return result
+
+
+def parse_lockfile(content: str, limits: ParseLimits = DEFAULT_PARSE_LIMITS) -> ParsedLockfile:
     """Parse an npm lockfile v2 or v3 into nodes and declared dependencies."""
+    if len(content) > limits.max_characters:
+        raise LockfileParseError(f"Lockfile exceeds the character limit ({limits.max_characters})")
     try:
-        data: Any = json.loads(content)
+        data: Any = json.loads(content, object_pairs_hook=_reject_duplicate_keys)
     except json.JSONDecodeError as exc:
         raise LockfileParseError(f"Invalid JSON: {exc.msg}") from exc
+    except RecursionError as exc:
+        raise LockfileParseError("Lockfile JSON is nested too deeply") from exc
 
     if not isinstance(data, Mapping):
         raise LockfileParseError("Lockfile root must be a JSON object")
@@ -126,7 +212,11 @@ def parse_lockfile(content: str) -> ParsedLockfile:
     if not isinstance(packages, Mapping):
         raise LockfileParseError("Lockfile must contain a packages object")
 
-    root = packages.get("", {})
+    if "" not in packages:
+        raise LockfileParseError("Lockfile has no root package entry")
+    if len(packages) - 1 > limits.max_packages:
+        raise LockfileParseError(f"Lockfile exceeds the package limit ({limits.max_packages})")
+    root = packages[""]
     if not isinstance(root, Mapping):
         raise LockfileParseError("Root package entry must be an object")
 
@@ -142,8 +232,7 @@ def parse_lockfile(content: str) -> ParsedLockfile:
         if install_path == "":
             continue
 
-        if not isinstance(install_path, str) or not install_path.startswith("node_modules/"):
-            raise LockfileParseError(f"Unsupported package installation path: {install_path!r}")
+        path_names = _package_names_in_path(install_path, limits)
 
         if not isinstance(entry, Mapping):
             raise LockfileParseError(f"Package entry must be an object: {install_path}")
@@ -154,10 +243,10 @@ def parse_lockfile(content: str) -> ParsedLockfile:
                 f"Linked package entries are not supported yet: {install_path}"
             )
 
-        name = entry.get("name") or _package_name_from_path(install_path)
+        name = entry["name"] if "name" in entry else path_names[-1]
         version = entry.get("version")
 
-        if not isinstance(name, str) or not name:
+        if not isinstance(name, str) or not _is_valid_package_name(name):
             raise LockfileParseError(f"Invalid package name: {install_path}")
         if not isinstance(version, str) or not version:
             raise LockfileParseError(f"Missing package version: {install_path}")
@@ -184,7 +273,7 @@ def parse_lockfile(content: str) -> ParsedLockfile:
                 version=version,
                 scopes=frozenset(scopes),
                 is_direct=is_direct,
-                is_dev=entry.get("dev") is True,
+                is_dev=_is_development_only(scopes),
                 declared_dependencies=_read_declared_dependencies(
                     f"Package {install_path}", entry, _PACKAGE_DEPENDENCY_FIELDS
                 ),
@@ -197,6 +286,8 @@ def parse_lockfile(content: str) -> ParsedLockfile:
     )
 
 
-def parse_lockfile_text(content: str) -> list[DependencyNode]:
+def parse_lockfile_text(
+    content: str, limits: ParseLimits = DEFAULT_PARSE_LIMITS
+) -> list[DependencyNode]:
     """Parse installed package entries from an npm lockfile v2 or v3."""
-    return list(parse_lockfile(content).nodes)
+    return list(parse_lockfile(content, limits).nodes)

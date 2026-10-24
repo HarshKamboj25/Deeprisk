@@ -59,7 +59,14 @@ class DependencyNode(BaseModel):
     ecosystem: Ecosystem = Ecosystem.NPM
     scopes: frozenset[DependencyScope] = frozenset()
     is_direct: bool = False
-    is_dev: bool = False
+    is_dev: bool = Field(
+        default=False,
+        description=(
+            "True only when the package is reachable exclusively through development "
+            "dependencies. False does not mean production: a package with no recorded scope "
+            "is unclassified."
+        ),
+    )
     declared_dependencies: tuple[DeclaredDependency, ...] = ()
 
 

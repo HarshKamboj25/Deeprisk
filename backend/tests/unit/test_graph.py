@@ -3,8 +3,7 @@
 import pytest
 
 from deprisk.core import graph
-from deprisk.core.graph import build_dependency_edges
-from deprisk.core.lockfile import LockfileParseError
+from deprisk.core.graph import GraphBuildError, build_dependency_edges
 from deprisk.core.models import (
     ROOT_INSTALL_PATH,
     DependencyEdge,
@@ -311,5 +310,5 @@ def test_duplicate_install_paths_are_rejected() -> None:
         node("node_modules/example", "example", "2.0.0"),
     ]
 
-    with pytest.raises(LockfileParseError, match="Duplicate installation paths"):
+    with pytest.raises(GraphBuildError, match="Duplicate installation paths"):
         build_dependency_edges(nodes, {})

@@ -2,7 +2,6 @@
 
 from collections.abc import Sequence
 
-from deprisk.core.lockfile import LockfileParseError
 from deprisk.core.models import (
     ROOT_INSTALL_PATH,
     DeclaredDependency,
@@ -12,6 +11,10 @@ from deprisk.core.models import (
     EdgeResolution,
     ParsedLockfile,
 )
+
+
+class GraphBuildError(ValueError):
+    """Raised when parsed lockfile data cannot be turned into a consistent graph."""
 
 
 def build_graph_edges(parsed: ParsedLockfile) -> list[DependencyEdge]:
@@ -50,7 +53,7 @@ def _build_edges(
     """
     by_path = {node.install_path: node for node in nodes}
     if len(by_path) != len(nodes):
-        raise LockfileParseError("Duplicate installation paths found")
+        raise GraphBuildError("Duplicate installation paths found")
 
     edges: list[DependencyEdge] = []
 
