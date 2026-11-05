@@ -29,3 +29,21 @@ Merging those locations can lose dependency relationships.
 - Exact workspace and link:true behavior in real lockfiles.
 - Exact dev, optional, peer, and devOptional flags.
 - Whether sampled lockfiles auto-install peer dependencies.
+
+## Amendment (Checkpoints A to D)
+
+Status of the decisions above, as implemented and verified:
+- Points 1-5 and 7 hold as written. The edge carries: parent_path, child_path (None when
+  unresolved), dependency_name, requested_range, scope, is_optional and resolution
+  (resolved, missing_optional, missing). The "edge type" in point 3 is carried by scope.
+- Required tests: the two-instances and distinct-parents tests exist (test_graph.py,
+  test_lockfile_graph_integration.py, test_real_lockfiles.py), and so does the
+  missing_optional test. The "share one PackageVersion and one grouped finding" test does
+  not exist yet, because findings and the PackageVersion grouping key are not implemented.
+- Point 6 (findings link to all affected instances) is not implemented yet. It is tracked
+  as part of E5 in docs/tracker.md.
+- The three unverified items are now observed in the committed real fixtures: workspaces
+  produce `link` entries and member paths outside node_modules (the parser rejects these on
+  purpose); dev, optional, devOptional and peer flags appear; a peer dependency is installed
+  and flagged peer when nothing else requires it.
+- Further decisions and the open items are in ADR-003.
