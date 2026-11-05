@@ -206,3 +206,33 @@ def test_minimal_root_entry_is_accepted() -> None:
 
     assert parsed.nodes == ()
     assert parsed.root_dependencies == ()
+
+
+# --- required object validation ---------------------------------------------------------------
+
+
+def test_root_document_must_be_an_object() -> None:
+    with pytest.raises(LockfileParseError, match="Lockfile root must be a JSON object"):
+        parse_lockfile(json.dumps([]))
+
+
+def test_packages_field_must_be_an_object() -> None:
+    text = json.dumps({"lockfileVersion": 3, "packages": []})
+
+    with pytest.raises(LockfileParseError, match="Lockfile must contain a packages object"):
+        parse_lockfile(text)
+
+
+def test_package_entry_must_be_an_object() -> None:
+    text = json.dumps(
+        {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {},
+                "node_modules/x": [],
+            },
+        }
+    )
+
+    with pytest.raises(LockfileParseError, match="Package entry must be an object"):
+        parse_lockfile(text)
