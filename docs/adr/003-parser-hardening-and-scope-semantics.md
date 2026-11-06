@@ -100,11 +100,63 @@ against real npm lockfiles.
   file in a noisy environment; real lockfiles parse in milliseconds. Not measured on the
   developer's machine.
 
+### Graph-derived deployment scope (L1)
+
+19. Transitive deployment scope is derived from the dependency graph using `propagate_scopes(nodes, edges)`. Parser-level evidence remains unchanged: `DependencyNode.is_dev`, `DependencyNode.scopes`, and raw edge scopes are not mutated.
+
+20. Scope propagation uses physical `install_path` as node identity. Each node preserves every distinct reachable path state. The state space consists of eight combinations:
+
+    | Environment | Required | Optional |
+    |---|---|---|
+    | Production | (PROD, REQ) | (PROD, OPT) |
+    | Development | (DEV, REQ) | (DEV, OPT) |
+    | Peer | (PEER, REQ) | (PEER, OPT) |
+    | Unknown | (UNKNOWN, REQ) | (UNKNOWN, OPT) |
+
+21. Optionality propagates through descendants. Development optional paths remain distinct from production optional paths. Optional peer dependencies preserve their optional state. Peer edges inherit the deployment context of their parent; a standalone root peer dependency starts in the PEER context.
+
+22. UNKNOWN is conservative evidence. An UNKNOWN parent remains UNKNOWN across outgoing edges, including development edges. UNKNOWN evidence cannot be classified as development-only or dev-optional unless an unconditional production path independently establishes production precedence. An unconditional production path (PROD, REQ) takes precedence over other reached states.
+
+23. Effective classifications are represented by `EffectiveScope`: PRODUCTION, DEVELOPMENT, OPTIONAL, DEV_OPTIONAL, PEER, UNKNOWN, and UNREACHABLE. The result preserves all reached states and separate path-evidence flags. Missing edges with `child_path=None` terminate propagation.
+
+24. Parser disagreements are reported only for explicit contradictory evidence:
+    - A parser dev-only claim contradicted by graph-derived unconditional PRODUCTION.
+    - An explicitly recorded production scope contradicted by graph-derived DEVELOPMENT-only classification.
+
+    Unclassified parser evidence is not treated as a disagreement merely because graph propagation resolves it. OPTIONAL, DEV_OPTIONAL, PEER, UNKNOWN, and UNREACHABLE classifications do not independently imply a production/development contradiction.
+
+25. Propagation uses a finite-state worklist algorithm. The result and nested collections are immutable. Parser models and existing parser behavior remain unchanged.
+
+### L1 fixture validation evidence
+
+26. Scope propagation was cross-checked against all four committed real npm lockfile fixtures: general-v3, general-v2, peer-v3, and flags-v3.
+
+27. The fixture integration tests verify:
+    - Every parsed physical node is represented in the propagation result.
+    - No node is unreachable in the four tested fixtures.
+    - No evidence-based parser/graph contradictions are reported.
+    - npm dev, optional, devOptional, and peer flags are compared using the documented scope semantics.
+    - The peer-flagged `react` node in flags-v3 is classified as PRODUCTION because its peer edge originates from a production parent.
+    - Repeated propagation produces deterministic results.
+
+28. Observed graph-derived scope distributions:
+
+    | Fixture | Production | Development | DEV_OPTIONAL | Optional |
+    |---|---:|---:|---:|---:|
+    | general-v3 | 113 | 174 | 54 | 1 |
+    | general-v2 | 113 | 174 | 54 | 1 |
+    | peer-v3 | 218 | 0 | 0 | 0 |
+    | flags-v3 | 5 | 0 | 4 | 11 |
+
+29. The four fixture tests skipped are limited to flag-specific cases where the corresponding fixture contains no packages with the requested flag. The full test suite collected 335 tests: 331 passed and 4 skipped.
+
+30. L1 is verified on the four committed fixtures. This does not establish compatibility with every npm version, workspace/link entry, or unobserved flag combination.
+
 ## Known limitations and outstanding requirements
 
 | # | Item | Why it matters | Where it lands |
 |---|---|---|---|
-| L1 | Transitive production scope is not propagated. 110 of 342 nodes in the general fixtures carry no scope. | Scoring needs deployment context. | Dedicated checkpoint, required before any scoring work. A throwaway probe on assistant-side copies of the same four projects (npm 10.9.7, 922 nodes) reproduced npm's flags with no disagreement; it has not been run on the committed fixtures. The plan is to derive scope from the graph and report disagreements with npm's flags as evidence. |
+| L1 | Transitive production scope propagation | Verified. Graph-derived scope is implemented and cross-checked against all four committed npm fixtures. See decisions 19–30 and L1 fixture validation evidence. | Completed in L1; required before scoring work. |
 | L2 | OSV matching is not started. The core milestone (local repository -> parser -> graph -> OSV matching -> explainable report) is incomplete. | Binding safeguard S4. | Next major milestone. |
 | L3 | npm workspaces and `link` entries are rejected on purpose. | A standard workspace project cannot be scanned (fixture workspace-v3). | Separate checkpoint, policy chosen from the fixture evidence. |
 | L4 | The three required-object validation branches now have tests for the root document, `packages`, and package entry. | Validation coverage added. | Completed in H3; three tests pass in test_lockfile_hardening.py. |

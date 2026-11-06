@@ -11,10 +11,10 @@ Item IDs in this file (E1 and later) supersede the informal checkpoint labels us
 the project planning.
 
 ## Summary
-- 257 tests pass, and scripts\check.ps1 passes (ruff lint, ruff format, mypy, pytest).
+- 331 tests pass and 4 are skipped; the full suite collects 335 tests. L1 fixture cross-checks cover four committed npm lockfiles.
 - Implemented and verified: lockfile parser (v2 and v3), dependency graph with install-path
-  identity, parser hardening, and real npm lockfile fixtures.
-- Not started: vulnerability intelligence (OSV, EPSS, KEV, NVD), scope propagation, scoring,
+  identity, parser hardening, real npm lockfile fixtures, and graph-derived scope propagation (L1).
+- Not started: vulnerability intelligence (OSV, EPSS, KEV, NVD), scoring,
   reachability, remediation, repository ingestion, API, database, frontend, evaluation.
 - The core milestone (local repository -> parser -> graph -> OSV matching -> explainable
   report) is NOT complete.
@@ -43,7 +43,7 @@ the project planning.
 | R1, R2, R5, R6, R8 | Path and name validation, duplicate keys, missing root, limits, graph error type | Fixed in D (L5: defaults unvalidated at scale) |
 | R3 | Alias installs not marked direct | Fixed in C; confirmed on real fixtures |
 | R7 | Edge order depended on input order; edges with an identical (parent, name, scope) but different attributes keep the last one | Order pinned by tests in B. The last-wins case remains, but the parser cannot produce it. |
-| G6 | is_dev inconsistent with scopes; transitive scope missing | is_dev fixed in D. Scope propagation OPEN (L1). |
+| G6 | is_dev inconsistent with scopes; transitive scope missing | is_dev fixed in D. Scope propagation verified (F1). |
 | G5 | Resolution kind not modeled | OPEN (L6) |
 | R4 | Workspaces and link entries rejected | OPEN by decision (L3) |
 | - | Hand-written fixture in recorded/ | OPEN (L9) |
@@ -57,7 +57,7 @@ the project planning.
 | E3 | OSV client: batch query, hydrate, cache, normalize, alias grouping | E1 | Gold cases pass; failures and rate limits handled | Not started |
 | E4 | Local affected-range matcher with OSV cross-check | E3 | Disagreements with OSV are logged and explained | Not started |
 | E5 | Core vertical slice: CLI local repository -> parser -> graph -> OSV matching -> explainable report | E2-E4 | Tested on at least 3 real repositories; findings group by (PackageVersion, alias group) and link to every affected install (ADR-002 point 6) | Not started |
-| F1 | Transitive production-scope propagation | C | Scope derived from the graph; cross-checked against npm flags on every fixture; disagreements reported; must pass before F3 | Not started |
+| F1 | Transitive production-scope propagation | C | Scope derived from the graph; cross-checked against npm flags on all four committed fixtures; disagreements reported; must pass before F3 | Verified |
 | F2 | EPSS, KEV and NVD enrichment with snapshots | E1 | Missing data never treated as zero risk | Not started |
 | F3 | Scoring v1 (versioned hypothesis, score interval) | F1, F2 | Sensitivity analysis documented; weights not presented as validated | Not started |
 | G1 | Reachability tiers 0 and 1; Tier 2 only after the parser spike and tests pass | E5 | Evidence recorded; no-path-found never reported as safe | Not started |
@@ -71,8 +71,7 @@ the project planning.
 | I | Persistence, API, dashboard, evaluation report, final documentation | - | As in the Phase 1 plan | Not started |
 
 ## Outstanding requirements (binding)
-- Transitive production-scope propagation (F1) must be implemented and validated before any
-  vulnerability scoring begins.
+- Transitive production-scope propagation (F1) is implemented and verified against all four committed fixtures. It remains a prerequisite for vulnerability scoring.
 - OSV vulnerability matching (E3-E5) is the next major milestone.
 - npm workspaces and `link` entries remain unsupported and need a separate checkpoint (H2).
 - The parser's three "must be an object" branches still need tests (H3).
@@ -80,7 +79,7 @@ the project planning.
 - Also recorded: resolution kind must be modeled before OSV matching uses versions (E2), and
   external API behavior stays unverified until real responses are inspected (E1).
 
-## Test inventory (257)
+## Test inventory (335 collected: 331 passed, 4 skipped)
 | File | Tests |
 |---|---|
 | test_smoke.py | 1 |
@@ -92,7 +91,8 @@ the project planning.
 | test_lockfile_hardening.py | 69 |
 | test_parse_limits.py | 27 |
 | test_is_dev.py | 26 |
-| test_real_lockfiles.py | 56 |
+| test_real_lockfiles.py | 90 passed, 4 skipped |
+| test_scope_propagation.py | 40 |
 
 ## Environment
 - Python 3.12.10
