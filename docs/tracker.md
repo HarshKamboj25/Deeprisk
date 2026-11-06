@@ -11,10 +11,11 @@ Item IDs in this file (E1 and later) supersede the informal checkpoint labels us
 the project planning.
 
 ## Summary
-- 331 tests pass and 4 are skipped; the full suite collects 335 tests. L1 fixture cross-checks cover four committed npm lockfiles.
+- 365 tests pass and 4 are skipped; the full suite collects 369 tests. L1 fixture cross-checks cover four committed npm lockfiles.
 - Implemented and verified: lockfile parser (v2 and v3), dependency graph with install-path
   identity, parser hardening, real npm lockfile fixtures, and graph-derived scope propagation (L1).
-- Not started: vulnerability intelligence (OSV, EPSS, KEV, NVD), scoring,
+- Source-aware registry eligibility is implemented and tested; OSV API integration and advisory matching remain pending.
+- Not started: external vulnerability intelligence (OSV, EPSS, KEV, NVD), scoring,
   reachability, remediation, repository ingestion, API, database, frontend, evaluation.
 - The core milestone (local repository -> parser -> graph -> OSV matching -> explainable
   report) is NOT complete.
@@ -44,7 +45,7 @@ the project planning.
 | R3 | Alias installs not marked direct | Fixed in C; confirmed on real fixtures |
 | R7 | Edge order depended on input order; edges with an identical (parent, name, scope) but different attributes keep the last one | Order pinned by tests in B. The last-wins case remains, but the parser cannot produce it. |
 | G6 | is_dev inconsistent with scopes; transitive scope missing | is_dev fixed in D. Scope propagation verified (F1). |
-| G5 | Parser-side package source identity modeled; OSV matcher safeguard pending | Parser portion fixed; E2 in progress |
+| G5 | Parser-side package source identity and source-aware eligibility safeguard | Parser and eligibility guard implemented and tested; OSV query integration remains pending under E2 |
 | R4 | Workspaces and link entries rejected | OPEN by decision (L3) |
 | - | Hand-written fixture in recorded/ | OPEN (L9) |
 | - | Python dependencies unpinned | OPEN (L10) |
@@ -53,7 +54,7 @@ the project planning.
 | ID | Deliverable | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
 | E1 | API verification spike: OSV, EPSS, KEV, NVD | - | Real responses saved with timestamps; Verified and Unverified lists updated from them | Not started (formerly D1-4) |
-| E2 | Package source identity modeling and source-aware OSV matching | C | Non-registry versions are never matched as registry versions | In progress: parser model implemented; matcher safeguard pending |
+| E2 | Package source identity modeling and source-aware OSV matching | C | Non-registry versions are never matched as registry versions | In progress: shared classifier and eligibility guard implemented and tested; OSV integration pending |
 | E3 | OSV client: batch query, hydrate, cache, normalize, alias grouping | E1 | Gold cases pass; failures and rate limits handled | Not started |
 | E4 | Local affected-range matcher with OSV cross-check | E3 | Disagreements with OSV are logged and explained | Not started |
 | E5 | Core vertical slice: CLI local repository -> parser -> graph -> OSV matching -> explainable report | E2-E4 | Tested on at least 3 real repositories; findings group by (PackageVersion, alias group) and link to every affected install (ADR-002 point 6) | Not started |
@@ -76,10 +77,10 @@ the project planning.
 - npm workspaces and `link` entries remain unsupported and need a separate checkpoint (H2).
 - The parser's three "must be an object" branches still need tests (H3).
 - Parse-limit defaults need validation against larger real lockfiles (H4).
-- Also recorded: parser-side package source identity is implemented; source-aware OSV matching remains pending (E2), and
-  external API behavior stays unverified until real responses are inspected (E1).
+- Parser-side package source identity and the source-aware eligibility guard are implemented and tested. Integration with OSV advisory queries remains pending under E2.
+- External API behavior stays unverified until real responses are inspected under E1.
 
-## Test inventory (357 collected: 353 passed, 4 skipped)
+## Test inventory (369 collected: 365 passed, 4 skipped)
 | File | Tests |
 |---|---|
 | test_smoke.py | 1 |
@@ -93,6 +94,8 @@ the project planning.
 | test_is_dev.py | 26 |
 | test_real_lockfiles.py | 90 passed, 4 skipped |
 | test_scope_propagation.py | 40 |
+| test_package_sources.py | 22 |
+| test_source_eligibility.py | 12 |
 
 ## Environment
 - Python 3.12.10
