@@ -275,3 +275,52 @@ def test_repeated_advisory_fetch_uses_cache() -> None:
         assert first == second
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "advisory_id",
+    [
+        "GHSA-35jh-r3h4-6jhm",
+        "CVE-2026-1234",
+        "PYSEC-2026-123",
+        "RUSTSEC-2026-0001",
+    ],
+)
+def test_valid_advisory_ids_are_accepted(advisory_id: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == f"/v1/vulns/{advisory_id}"
+        return httpx.Response(200, json={"id": advisory_id})
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            advisory = await OSVClient(client=http).get_advisory(advisory_id)
+
+        assert advisory.id == advisory_id
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "advisory_id",
+    [
+        "../GHSA-example",
+        "GHSA-example/extra",
+        "GHSA-example?admin=true",
+        "GHSA-example#fragment",
+        "GHSA example",
+        "%2e%2e%2f",
+        "GHSA-example\\extra",
+    ],
+)
+def test_invalid_advisory_ids_are_rejected_before_request(
+    advisory_id: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        pytest.fail("Invalid advisory ID must be rejected before HTTP request")
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            with pytest.raises(ValueError, match="invalid characters"):
+                await OSVClient(client=http).get_advisory(advisory_id)
+
+    asyncio.run(run())
