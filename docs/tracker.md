@@ -3,7 +3,7 @@
 Status values: Not started | In progress | Implemented | Verified
 Only Verified counts as done. Verified means the tests pass on the developer's machine.
 
-Last updated after E1 evidence capture; commit pending.
+Last updated after E1 verification; commit 629f499.
 Schedule: four-week maximum. The project start date is UNRESOLVED: no verified date is
 available, so elapsed and remaining time are not tracked here. Record the date when it is
 known.
@@ -53,7 +53,7 @@ the project planning.
 ## Remaining work
 | ID | Deliverable | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
-| E1 | API verification spike: OSV, EPSS, KEV, NVD | - | Real responses saved with timestamps; Verified and Unverified lists updated from them | In progress: captures and report prepared; repository check pending |
+| E1 | API verification spike: OSV, EPSS, KEV, NVD | - | Real timestamped responses inspected; findings documented; full checks pass | Verified |
 | E2 | Package source identity modeling and source-aware OSV matching | C | Non-registry versions are never matched as registry versions | In progress: shared classifier and eligibility guard implemented and tested; OSV integration pending |
 | E3 | OSV client: batch query, hydrate, cache, normalize, alias grouping | E1 | Gold cases pass; failures and rate limits handled | Not started |
 | E4 | Local affected-range matcher with OSV cross-check | E3 | Disagreements with OSV are logged and explained | Not started |
