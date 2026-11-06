@@ -148,9 +148,11 @@ against real npm lockfiles.
     | peer-v3 | 218 | 0 | 0 | 0 |
     | flags-v3 | 5 | 0 | 4 | 11 |
 
-29. The four fixture tests skipped are limited to flag-specific cases where the corresponding fixture contains no packages with the requested flag. The full test suite collected 335 tests: 331 passed and 4 skipped.
+29. The four fixture tests skipped are limited to flag-specific cases where the corresponding fixture contains no packages with the requested flag. The full test suite collected 357 tests: 353 passed and 4 skipped.
 
 30. L1 is verified on the four committed fixtures. This does not establish compatibility with every npm version, workspace/link entry, or unobserved flag combination.
+
+31. L6 parser-side source identity is implemented. `PackageSourceType` distinguishes registry, git, file, URL, and unknown sources. The parser preserves `resolved`, `integrity`, and `hasInstallScript`. Twenty-two focused source tests pass; the full suite collects 357 tests, with 353 passed and 4 skipped. Source-aware OSV matching remains pending under E2. Link/workspace entries remain unsupported under L3.
 
 ## Known limitations and outstanding requirements
 
@@ -161,7 +163,7 @@ against real npm lockfiles.
 | L3 | npm workspaces and `link` entries are rejected on purpose. | A standard workspace project cannot be scanned (fixture workspace-v3). | Separate checkpoint, policy chosen from the fixture evidence. |
 | L4 | The three required-object validation branches now have tests for the root document, `packages`, and package entry. | Validation coverage added. | Completed in H3; three tests pass in test_lockfile_hardening.py. |
 | L5 | Parse-limit defaults have been measured against committed fixtures, a generated 748-package lockfile, and local real-project lockfiles; the configured maximum limits have not been stress-tested. | Measurements support retaining the current defaults, but do not prove behavior at the configured maxima. | H4 measurements recorded in docs/tracker.md; retain defaults and revisit with larger-scale evidence. |
-| L6 | Resolution kind is not modeled (registry, git, file, link; resolved, integrity, hasInstallScript). | A git dependency keeps a version that is not a registry version, which would give false OSV matches. | Before OSV matching uses versions. |
+| L6 | Parser-side package source identity is modeled for registry, git, file, URL, and unknown sources; `resolved`, `integrity`, and `hasInstallScript` are preserved. npm link/workspace entries remain unsupported under L3. | OSV matching must use this identity so Git, file, URL, and unknown sources are not treated as registry versions. | Parser implementation verified; matcher safeguard remains pending in E2. |
 | L7 | External API behavior is unverified (OSV, EPSS, KEV, NVD). | Phase 1 notes marked some facts verified from documentation and search results. Under safeguard S6 they stay unverified until real responses are inspected. | The API verification spike, before OSV implementation. |
 | L8 | Fixture coverage is thin: one project per shape, one npm version committed (12.0.2; counts were cross-checked against npm 10.9.7 outside the repository). `dev`+`peer` and `dev`+`optional` flag combinations were never seen in real output, and treating peer as orthogonal is an assumption. | Real files may differ. | Add fixtures as new shapes appear. |
 | L9 | The hand-written `recorded/package-lock-v3-minimal.json` is referenced by no test and sits in a folder that implies real recorded data. | Misleading provenance. | Relabel or remove. |

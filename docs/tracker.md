@@ -44,7 +44,7 @@ the project planning.
 | R3 | Alias installs not marked direct | Fixed in C; confirmed on real fixtures |
 | R7 | Edge order depended on input order; edges with an identical (parent, name, scope) but different attributes keep the last one | Order pinned by tests in B. The last-wins case remains, but the parser cannot produce it. |
 | G6 | is_dev inconsistent with scopes; transitive scope missing | is_dev fixed in D. Scope propagation verified (F1). |
-| G5 | Resolution kind not modeled | OPEN (L6) |
+| G5 | Parser-side package source identity modeled; OSV matcher safeguard pending | Parser portion fixed; E2 in progress |
 | R4 | Workspaces and link entries rejected | OPEN by decision (L3) |
 | - | Hand-written fixture in recorded/ | OPEN (L9) |
 | - | Python dependencies unpinned | OPEN (L10) |
@@ -53,7 +53,7 @@ the project planning.
 | ID | Deliverable | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
 | E1 | API verification spike: OSV, EPSS, KEV, NVD | - | Real responses saved with timestamps; Verified and Unverified lists updated from them | Not started (formerly D1-4) |
-| E2 | Resolution kind modeling (registry, git, file) | C | Non-registry versions are never matched as registry versions | Not started |
+| E2 | Package source identity modeling and source-aware OSV matching | C | Non-registry versions are never matched as registry versions | In progress: parser model implemented; matcher safeguard pending |
 | E3 | OSV client: batch query, hydrate, cache, normalize, alias grouping | E1 | Gold cases pass; failures and rate limits handled | Not started |
 | E4 | Local affected-range matcher with OSV cross-check | E3 | Disagreements with OSV are logged and explained | Not started |
 | E5 | Core vertical slice: CLI local repository -> parser -> graph -> OSV matching -> explainable report | E2-E4 | Tested on at least 3 real repositories; findings group by (PackageVersion, alias group) and link to every affected install (ADR-002 point 6) | Not started |
@@ -76,10 +76,10 @@ the project planning.
 - npm workspaces and `link` entries remain unsupported and need a separate checkpoint (H2).
 - The parser's three "must be an object" branches still need tests (H3).
 - Parse-limit defaults need validation against larger real lockfiles (H4).
-- Also recorded: resolution kind must be modeled before OSV matching uses versions (E2), and
+- Also recorded: parser-side package source identity is implemented; source-aware OSV matching remains pending (E2), and
   external API behavior stays unverified until real responses are inspected (E1).
 
-## Test inventory (335 collected: 331 passed, 4 skipped)
+## Test inventory (357 collected: 353 passed, 4 skipped)
 | File | Tests |
 |---|---|
 | test_smoke.py | 1 |

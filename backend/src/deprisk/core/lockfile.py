@@ -4,11 +4,13 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 from deprisk.core.models import (
     DeclaredDependency,
     DependencyNode,
     DependencyScope,
+    PackageSourceType,
     ParsedLockfile,
 )
 
@@ -188,6 +190,57 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _classify_package_source(resolved: str | None) -> PackageSourceType:
+    """Classify npm package origin without treating arbitrary URLs as registry packages."""
+    if not resolved:
+        return PackageSourceType.UNKNOWN
+
+    value = resolved.strip()
+    if not value:
+        return PackageSourceType.UNKNOWN
+
+    lowered = value.lower()
+
+    if lowered.startswith(("git+", "git://", "ssh://")) or lowered.startswith(
+        ("github:", "gitlab:", "bitbucket:")
+    ):
+        return PackageSourceType.GIT
+
+    if lowered.startswith("file:"):
+        return PackageSourceType.FILE
+
+    try:
+        parsed = urlsplit(value)
+        scheme = parsed.scheme.lower()
+        hostname = parsed.hostname
+        port = parsed.port
+        username = parsed.username
+        password = parsed.password
+    except ValueError:
+        return PackageSourceType.UNKNOWN
+
+    if scheme in {"http", "https"}:
+        default_port = 443 if scheme == "https" else 80
+
+        is_trusted_registry = (
+            (hostname or "").lower() == "registry.npmjs.org"
+            and username is None
+            and password is None
+            and port in (None, default_port)
+        )
+
+        if is_trusted_registry:
+            return PackageSourceType.REGISTRY
+
+        return PackageSourceType.URL
+
+    if scheme:
+        return PackageSourceType.URL
+
+    # npm may store local tarball paths without an explicit file: prefix.
+    return PackageSourceType.FILE
+
+
 def parse_lockfile(content: str, limits: ParseLimits = DEFAULT_PARSE_LIMITS) -> ParsedLockfile:
     """Parse an npm lockfile v2 or v3 into nodes and declared dependencies."""
     if len(content) > limits.max_characters:
@@ -266,6 +319,17 @@ def parse_lockfile(content: str, limits: ParseLimits = DEFAULT_PARSE_LIMITS) -> 
         if entry.get("peer") is True:
             scopes.add(DependencyScope.PEER)
 
+        resolved = entry.get("resolved")
+        integrity = entry.get("integrity")
+        has_install_script = entry.get("hasInstallScript", False)
+
+        if resolved is not None and not isinstance(resolved, str):
+            raise LockfileParseError(f"Invalid resolved metadata: {install_path}")
+        if integrity is not None and not isinstance(integrity, str):
+            raise LockfileParseError(f"Invalid integrity metadata: {install_path}")
+        if not isinstance(has_install_script, bool):
+            raise LockfileParseError(f"Invalid hasInstallScript metadata: {install_path}")
+
         nodes.append(
             DependencyNode(
                 install_path=install_path,
@@ -277,6 +341,10 @@ def parse_lockfile(content: str, limits: ParseLimits = DEFAULT_PARSE_LIMITS) -> 
                 declared_dependencies=_read_declared_dependencies(
                     f"Package {install_path}", entry, _PACKAGE_DEPENDENCY_FIELDS
                 ),
+                source_type=_classify_package_source(resolved),
+                resolved=resolved,
+                integrity=integrity,
+                has_install_script=has_install_script,
             )
         )
 

@@ -13,6 +13,14 @@ class Ecosystem(StrEnum):
     NPM = "npm"
 
 
+class PackageSourceType(StrEnum):
+    REGISTRY = "registry"
+    GIT = "git"
+    FILE = "file"
+    URL = "url"
+    UNKNOWN = "unknown"
+
+
 class DependencyScope(StrEnum):
     PRODUCTION = "production"
     DEVELOPMENT = "development"
@@ -68,6 +76,10 @@ class DependencyNode(BaseModel):
         ),
     )
     declared_dependencies: tuple[DeclaredDependency, ...] = ()
+    source_type: PackageSourceType = PackageSourceType.UNKNOWN
+    resolved: str | None = None
+    integrity: str | None = None
+    has_install_script: bool = False
 
 
 class DependencyEdge(BaseModel):
