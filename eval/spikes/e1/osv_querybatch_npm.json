@@ -1,0 +1,61 @@
+{
+  "name": "osv_querybatch_npm",
+  "captured_at_utc": "2026-11-06T04:54:37.689680+00:00",
+  "method": "POST",
+  "url": "https://api.osv.dev/v1/querybatch",
+  "request_body": {
+    "queries": [
+      {
+        "package": {
+          "name": "lodash",
+          "ecosystem": "npm"
+        },
+        "version": "4.17.20"
+      },
+      {
+        "package": {
+          "name": "minimist",
+          "ecosystem": "npm"
+        },
+        "version": "1.2.5"
+      }
+    ]
+  },
+  "http_status": 200,
+  "response_headers": {
+    "content-type": "application/json",
+    "date": "Fri, 06 Nov 2026 04:54:37 GMT"
+  },
+  "response": {
+    "results": [
+      {
+        "vulns": [
+          {
+            "id": "GHSA-29mw-wpgm-hmr9",
+            "modified": "2025-09-29T21:12:31.102523Z"
+          },
+          {
+            "id": "GHSA-35jh-r3h4-6jhm",
+            "modified": "2026-10-17T02:55:38.085813Z"
+          },
+          {
+            "id": "GHSA-r5fr-rjxr-66jc",
+            "modified": "2026-10-17T02:56:15.633068Z"
+          },
+          {
+            "id": "GHSA-xxjr-mmjv-4gpg",
+            "modified": "2026-11-04T03:15:10.832238Z"
+          }
+        ]
+      },
+      {
+        "vulns": [
+          {
+            "id": "GHSA-xvch-5gv4-984h",
+            "modified": "2026-03-13T22:11:59.523514Z"
+          }
+        ]
+      }
+    ]
+  }
+}

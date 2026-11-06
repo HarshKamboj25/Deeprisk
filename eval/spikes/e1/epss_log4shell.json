@@ -1,0 +1,29 @@
+{
+  "name": "epss_log4shell",
+  "captured_at_utc": "2026-11-06T04:54:38.535410+00:00",
+  "method": "GET",
+  "url": "https://api.first.org/data/v1/epss?cve=CVE-2021-44228",
+  "request_body": null,
+  "http_status": 200,
+  "response_headers": {
+    "content-type": "application/json; charset=utf-8",
+    "date": "Fri, 06 Nov 2026 04:54:38 GMT"
+  },
+  "response": {
+    "status": "OK",
+    "status-code": 200,
+    "version": "1.0",
+    "access": "public",
+    "total": 1,
+    "offset": 0,
+    "limit": 100,
+    "data": [
+      {
+        "cve": "CVE-2021-44228",
+        "epss": "0.999990000",
+        "percentile": "1.000000000",
+        "date": "2026-11-05"
+      }
+    ]
+  }
+}
