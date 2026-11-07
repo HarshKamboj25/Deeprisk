@@ -5,6 +5,7 @@ import asyncio
 import httpx
 
 from deprisk.vulnerability.osv_client import OSVClient
+from deprisk.vulnerability.osv_crosscheck import OSVCrossCheckStatus
 from deprisk.vulnerability.osv_service import OSVVulnerabilityService
 from deprisk.vulnerability.osv_version_matcher import VersionMatchStatus
 from deprisk.vulnerability.registry_candidates import RegistryQueryCandidate
@@ -239,6 +240,114 @@ def test_lookup_with_no_candidates_skips_network() -> None:
         assert result.normalized_advisories == ()
         assert result.alias_groups == ()
         assert result.match_decisions == ()
+        assert result.findings == ()
+
+    asyncio.run(run())
+
+
+def test_lookup_records_cross_check_agreement() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/querybatch":
+            return httpx.Response(
+                200,
+                json={"results": [{"vulns": [{"id": "GHSA-agreement"}]}]},
+            )
+
+        return httpx.Response(
+            200,
+            json={
+                "id": "GHSA-agreement",
+                "affected": [affected_package()],
+            },
+        )
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            service = OSVVulnerabilityService(OSVClient(client=http))
+            result = await service.lookup([candidate("lodash", "4.17.20", "node_modules/lodash")])
+
+        assert len(result.cross_check_decisions) == 1
+        decision = result.cross_check_decisions[0]
+        assert decision.status is OSVCrossCheckStatus.AGREEMENT
+        assert decision.advisory_id == "GHSA-agreement"
+        assert len(result.findings) == 1
+
+    asyncio.run(run())
+
+
+def test_lookup_records_disagreement_without_creating_finding(caplog) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/querybatch":
+            return httpx.Response(
+                200,
+                json={"results": [{"vulns": [{"id": "GHSA-disagreement"}]}]},
+            )
+
+        return httpx.Response(
+            200,
+            json={
+                "id": "GHSA-disagreement",
+                "affected": [affected_package(fixed="4.17.20")],
+            },
+        )
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            service = OSVVulnerabilityService(OSVClient(client=http))
+            result = await service.lookup([candidate("lodash", "4.17.21", "node_modules/lodash")])
+
+        assert result.match_decisions[0].status is VersionMatchStatus.NOT_AFFECTED
+        assert len(result.cross_check_decisions) == 1
+        decision = result.cross_check_decisions[0]
+        assert decision.status is OSVCrossCheckStatus.DISAGREEMENT
+        assert decision.local_status is VersionMatchStatus.NOT_AFFECTED
+        assert "false positive" in decision.explanation
+        assert result.findings == ()
+
+        warning_messages = [
+            record.getMessage() for record in caplog.records if record.levelname == "WARNING"
+        ]
+        assert len(warning_messages) == 1
+        assert "package=lodash" in warning_messages[0]
+        assert "version=4.17.21" in warning_messages[0]
+        assert "advisory_id=GHSA-disagreement" in warning_messages[0]
+        assert "node_modules/lodash" in warning_messages[0]
+        assert decision.explanation in warning_messages[0]
+
+    asyncio.run(run())
+
+
+def test_lookup_records_inconclusive_without_creating_finding() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/querybatch":
+            return httpx.Response(
+                200,
+                json={"results": [{"vulns": [{"id": "GHSA-inconclusive"}]}]},
+            )
+
+        return httpx.Response(
+            200,
+            json={
+                "id": "GHSA-inconclusive",
+                "affected": [
+                    {
+                        "package": {"ecosystem": "npm", "name": "lodash"},
+                        "ranges": [],
+                        "versions": [],
+                    }
+                ],
+            },
+        )
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            service = OSVVulnerabilityService(OSVClient(client=http))
+            result = await service.lookup([candidate("lodash", "4.17.20", "node_modules/lodash")])
+
+        assert result.match_decisions[0].status is VersionMatchStatus.UNKNOWN
+        assert len(result.cross_check_decisions) == 1
+        decision = result.cross_check_decisions[0]
+        assert decision.status is OSVCrossCheckStatus.INCONCLUSIVE
         assert result.findings == ()
 
     asyncio.run(run())

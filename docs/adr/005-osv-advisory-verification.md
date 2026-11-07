@@ -1,4 +1,4 @@
-﻿# ADR-005: OSV advisory lookup and version verification
+# ADR-005: OSV advisory lookup and version verification
 
 Status: accepted
 
@@ -90,7 +90,7 @@ Source eligibility is defined separately in ADR-004.
 - An end-to-end integration test verifies source eligibility through
   registry candidate selection and OSV lookup. Non-registry and unknown
   sources are excluded from the OSV batch request.
-- Latest full check: 454 passed, 4 skipped, 458 collected.
+- Latest full check: 462 passed, 4 skipped, 466 collected.
 - Ruff lint, Ruff formatting, and strict mypy passed.
 
 ## Limitations
@@ -105,7 +105,8 @@ Source eligibility is defined separately in ADR-004.
   broader failure behavior remain unverified beyond the implemented
   retry and error handling.
 - EPSS, CISA KEV, and NVD enrichment are separate future work.
-- OSV disagreement logging and cross-check behavior remain separate
-  from this implementation and must be addressed under E4.
+- OSV batch-to-advisory consistency cross-checking and disagreement
+  warning logs are implemented under E4 (ADR-006). This is not an
+  independent external vulnerability intelligence cross-check.
 - The complete local repository-to-report vertical slice remains
   future work under E5.
