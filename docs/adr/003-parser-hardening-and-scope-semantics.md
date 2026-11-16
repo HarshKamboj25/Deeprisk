@@ -127,11 +127,19 @@ against real npm lockfiles.
 
 25. Propagation uses a finite-state worklist algorithm. The result and nested collections are immutable. Parser models and existing parser behavior remain unchanged.
 
+26. Unreachable and unresolved evidence must not be interpreted as proof of safety:
+    - `UNREACHABLE` means no resolved path was found in the analyzed dependency graph.
+    - Missing required and optional edges remain visible in the report and are not traversed.
+    - Scoring v1 assigns zero operational exposure to findings affecting only unreachable installations. This is a versioned model assumption, not a safety guarantee.
+    - Intrinsic vulnerability severity remains visible even when operational risk is zero.
+    - Reports must preserve unreachable status and unresolved-edge evidence so consumers can distinguish no path found from a confirmed safe dependency.
+
+
 ### L1 fixture validation evidence
 
-26. Scope propagation was cross-checked against all four committed real npm lockfile fixtures: general-v3, general-v2, peer-v3, and flags-v3.
+27. Scope propagation was cross-checked against all four committed real npm lockfile fixtures: general-v3, general-v2, peer-v3, and flags-v3.
 
-27. The fixture integration tests verify:
+28. The fixture integration tests verify:
     - Every parsed physical node is represented in the propagation result.
     - No node is unreachable in the four tested fixtures.
     - No evidence-based parser/graph contradictions are reported.
@@ -139,7 +147,7 @@ against real npm lockfiles.
     - The peer-flagged `react` node in flags-v3 is classified as PRODUCTION because its peer edge originates from a production parent.
     - Repeated propagation produces deterministic results.
 
-28. Observed graph-derived scope distributions:
+29. Observed graph-derived scope distributions:
 
     | Fixture | Production | Development | DEV_OPTIONAL | Optional |
     |---|---:|---:|---:|---:|
@@ -148,11 +156,11 @@ against real npm lockfiles.
     | peer-v3 | 218 | 0 | 0 | 0 |
     | flags-v3 | 5 | 0 | 4 | 11 |
 
-29. The four fixture tests skipped are limited to flag-specific cases where the corresponding fixture contains no packages with the requested flag. The full test suite collected 357 tests: 353 passed and 4 skipped.
+30. The four fixture tests skipped are limited to flag-specific cases where the corresponding fixture contains no packages with the requested flag. The full test suite collected 357 tests: 353 passed and 4 skipped.
 
-30. L1 is verified on the four committed fixtures. This does not establish compatibility with every npm version, workspace/link entry, or unobserved flag combination.
+31. L1 is verified on the four committed fixtures. This does not establish compatibility with every npm version, workspace/link entry, or unobserved flag combination.
 
-31. L6 parser-side source identity is implemented. `PackageSourceType` distinguishes registry, git, file, URL, and unknown sources. The parser preserves `resolved`, `integrity`, and `hasInstallScript`. Twenty-two focused source tests pass; the full suite collects 357 tests, with 353 passed and 4 skipped. Source-aware OSV matching remains pending under E2. Link/workspace entries remain unsupported under L3.
+32. L6 parser-side source identity is implemented. `PackageSourceType` distinguishes registry, git, file, URL, and unknown sources. The parser preserves `resolved`, `integrity`, and `hasInstallScript`. Twenty-two focused source tests pass; the full suite collects 357 tests, with 353 passed and 4 skipped. Source-aware OSV matching remains pending under E2. Link/workspace entries remain unsupported under L3.
 
 ## Known limitations and outstanding requirements
 
@@ -166,6 +174,6 @@ against real npm lockfiles.
 | L6 | Parser-side package source identity is modeled for registry, git, file, URL, and unknown sources; `resolved`, `integrity`, and `hasInstallScript` are preserved. npm link/workspace entries remain unsupported under L3. | OSV matching must use this identity so Git, file, URL, and unknown sources are not treated as registry versions. | Parser implementation verified; matcher safeguard remains pending in E2. |
 | L7 | External API behavior is unverified (OSV, EPSS, KEV, NVD). | Phase 1 notes marked some facts verified from documentation and search results. Under safeguard S6 they stay unverified until real responses are inspected. | The API verification spike, before OSV implementation. |
 | L8 | Fixture coverage is thin: one project per shape, one npm version committed (12.0.2; counts were cross-checked against npm 10.9.7 outside the repository). `dev`+`peer` and `dev`+`optional` flag combinations were never seen in real output, and treating peer as orthogonal is an assumption. | Real files may differ. | Add fixtures as new shapes appear. |
-| L9 | The hand-written `recorded/package-lock-v3-minimal.json` is referenced by no test and sits in a folder that implies real recorded data. | Misleading provenance. | Relabel or remove. |
-| L10 | Python dependencies have lower bounds only and no lock. | Reproducibility and supply-chain hygiene of the tool itself. | Pin before release. |
+| L9 | The hand-written recorded/package-lock-v3-minimal.json was unused by tests and implied real recorded provenance. | Misleading provenance. | Resolved in H5: removed the unused fixture; genuine recorded npm fixtures retained. |
+| L10 | Python dependencies had lower bounds only and no lock. | Reproducibility and supply-chain hygiene of the tool itself. | Resolved in H5: exact installed dependency versions and transitive dependencies pinned in backend/requirements-lock.txt; pip check and dry-run passed. |
 | L11 | Two error messages echo untruncated file text: the dependency name in the string-range error and the lockfileVersion value (100,000 characters measured). They are escaped, so no log injection, but their length is unbounded. | Safe logging. | Small code fix: bound both with the quoting helper, plus tests (tracker H6). |

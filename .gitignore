@@ -27,3 +27,49 @@ scan-workspaces/
 Thumbs.db
 
 # Recorded public API fixtures are intentionally committed
+# Local databases and runtime data
+*.db
+*.sqlite
+*.sqlite3
+.deprisk/
+scan-workspace/
+scan-workspaces/
+
+# Temporary diagnostics
+backend/osv_diagnostic.py
+
+# Backup and temporary files
+*.bak
+*.backup-*
+*.before-debug
+*.pre-chunking
+*.f3-backup
+
+# Generated reports
+*-live-report.json
+
+# Local frontend backups
+frontend/backups/
+
+# Frontend temporary backups and snapshots
+frontend/backups/
+frontend/src/*.bak
+frontend/src/*.before-*
+frontend/src/*.backup-*
+frontend/src/*.backup
+frontend/src/*.navbar-current
+frontend/src/*.neon-backup-*
+frontend/src/*-before-*
+frontend/src/*.20261112_*.bak
+
+# Temporary source snapshots and diagnostic backups
+*.pre-*
+*.before-*
+
+# Frontend page backups and temporary snapshots
+frontend/src/pages/*-before-*
+frontend/src/pages/*.bak
+frontend/src/pages/*.backup*
+
+# Local-only diagnostic utilities
+frontend/inspect-lockfiles.cjs

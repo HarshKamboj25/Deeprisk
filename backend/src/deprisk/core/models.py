@@ -125,6 +125,30 @@ class ParsedLockfile(BaseModel):
     root_dependencies: tuple[DeclaredDependency, ...] = ()
 
 
+class RemediationStatus(StrEnum):
+    AVAILABLE = "available"
+    UNKNOWN = "unknown"
+
+
+class RemediationReference(BaseModel):
+    """Advisory-backed remediation evidence for one affected package."""
+
+    model_config = ConfigDict(frozen=True)
+
+    package_name: str = Field(min_length=1)
+    ecosystem: str = Field(min_length=1)
+    fixed_versions: tuple[str, ...] = ()
+    status: RemediationStatus
+
+    @model_validator(mode="after")
+    def _check_status_consistency(self) -> Self:
+        if self.status is RemediationStatus.AVAILABLE and not self.fixed_versions:
+            raise ValueError("available remediation requires at least one fixed version")
+        if self.status is RemediationStatus.UNKNOWN and self.fixed_versions:
+            raise ValueError("unknown remediation cannot contain fixed versions")
+        return self
+
+
 class AdvisoryReference(BaseModel):
     """Normalized reference to a vulnerability advisory."""
 
@@ -136,6 +160,7 @@ class AdvisoryReference(BaseModel):
     severity: AdvisorySeverity = AdvisorySeverity.UNKNOWN
     cvss_score: float | None = Field(default=None, ge=0, le=10)
     source: str = "OSV"
+    remediations: tuple[RemediationReference, ...] = ()
 
 
 class FindingEvidence(BaseModel):

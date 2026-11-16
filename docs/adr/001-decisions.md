@@ -1,4 +1,4 @@
-# ADR-001: Phase 1 decisions and implementation safeguards
+﻿# ADR-001: Phase 1 decisions and implementation safeguards
 
 Status: accepted
 
@@ -28,3 +28,11 @@ Status: accepted
 - Cut stretch features before security, correctness tests, or honest evaluation.
 - Mark external API behavior verified only after inspecting real responses.
 - Build incrementally and test every milestone.
+## Reachability tier definitions
+
+- **Tier 0 (direct reachability):** Identify dependencies directly reachable from the root installation through resolved root dependency edges.
+- **Tier 1 (transitive reachability):** Extend reachability through resolved dependency edges to include transitive installations. Preserve production, development, optional, peer, and unknown path evidence independently for each physical installation path.
+- **Tier 2:** Deferred. Do not implement or claim Tier 2 support until the parser spike, core pipeline, and corresponding tests pass.
+- **Shared implementation:** Tier 0 and Tier 1 use the same graph model and propagation engine. They represent increasing reachability depth, not separate algorithms.
+- **Unresolved-edge handling:** Missing required and optional edges remain explicit evidence. They must not be treated as resolved paths or silently discarded.
+- **Unreachable interpretation:** No path found means unreachable within the analyzed dependency graph. It does not establish that a dependency or vulnerability is safe. Reports must preserve unreachable status and supporting evidence.

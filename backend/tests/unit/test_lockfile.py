@@ -49,17 +49,64 @@ def test_extracts_scoped_package_name() -> None:
     assert scoped.version == "2.0.0"
 
 
-def test_marks_direct_dependency() -> None:
+def test_distinguishes_direct_and_nested_installations() -> None:
     nodes = parse_lockfile_text(make_lockfile())
-    direct = next(node for node in nodes if node.name == "example")
+    examples = {node.install_path: node for node in nodes if node.name == "example"}
+
+    direct = examples["node_modules/example"]
+    nested = examples["node_modules/other/node_modules/example"]
 
     assert direct.is_direct is True
     assert DependencyScope.PRODUCTION in direct.scopes
 
+    assert nested.is_direct is False
+    assert DependencyScope.PRODUCTION not in nested.scopes
 
-def test_rejects_unsupported_lockfile_version() -> None:
-    with pytest.raises(LockfileParseError, match="Unsupported lockfileVersion"):
-        parse_lockfile_text(make_lockfile(1))
+
+def make_v1_lockfile() -> str:
+    return json.dumps({
+        "name": "fixture",
+        "version": "1.0.0",
+        "lockfileVersion": 1,
+        "requires": True,
+        "dependencies": {
+            "example": {
+                "version": "1.2.3",
+                "requires": {"nested": "^2.0.0"},
+                "dependencies": {
+                    "nested": {"version": "2.1.0"}
+                },
+            },
+            "@demo/scoped": {"version": "2.0.0"},
+        },
+    })
+
+
+def test_parses_npm_v1_nested_dependency_tree() -> None:
+    nodes = parse_lockfile_text(make_v1_lockfile())
+    by_path = {node.install_path: node for node in nodes}
+
+    assert len(nodes) == 3
+    assert by_path["node_modules/example"].version == "1.2.3"
+    assert by_path["node_modules/example/node_modules/nested"].version == "2.1.0"
+    assert by_path["node_modules/@demo/scoped"].version == "2.0.0"
+    assert by_path["node_modules/example"].is_direct is True
+    assert by_path["node_modules/example/node_modules/nested"].is_direct is False
+    assert DependencyScope.UNKNOWN in by_path["node_modules/example"].scopes
+
+
+def test_long_lockfile_version_is_bounded_in_error_message() -> None:
+    long_version = "x" * 100_000
+    data = json.loads(make_lockfile())
+    data["lockfileVersion"] = long_version
+
+    with pytest.raises(LockfileParseError) as exc_info:
+        parse_lockfile_text(json.dumps(data))
+
+    message = str(exc_info.value)
+    assert len(message) < 200
+    assert "..." in message
+    assert "expected 1, 2 or 3" in message
 
 
 def test_rejects_malformed_json() -> None:
@@ -72,4 +119,22 @@ def test_rejects_missing_package_version() -> None:
     data["packages"]["node_modules/example"]["version"] = ""
 
     with pytest.raises(LockfileParseError, match="Missing package version"):
+        parse_lockfile_text(json.dumps(data))
+
+
+def test_rejects_workspace_link_before_workspace_path_regardless_of_entry_order() -> None:
+    data = json.loads(make_lockfile())
+    packages = data["packages"]
+
+    data["packages"] = {
+        "": packages[""],
+        "packages/app": {"version": "1.0.0"},
+        "node_modules/app": {"resolved": "packages/app", "link": True},
+        **{path: entry for path, entry in packages.items() if path},
+    }
+
+    with pytest.raises(
+        LockfileParseError,
+        match="Linked package entries are not supported yet",
+    ):
         parse_lockfile_text(json.dumps(data))

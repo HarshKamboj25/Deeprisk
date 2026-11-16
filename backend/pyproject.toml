@@ -11,9 +11,18 @@ dependencies = [
   "pydantic>=2.6",
   "httpx>=0.27",
   "semantic-version>=2.10,<3",
+  "sqlalchemy[asyncio]>=2.0,<3",
+  "alembic>=1.13,<2",
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
 ]
 
+[project.scripts]
+deprisk = "deprisk.cli:main"
+
 [project.optional-dependencies]
+sqlite = ["aiosqlite>=0.20,<1"]
+postgres = ["asyncpg>=0.29,<1"]
 dev = [
   "pytest>=8.0",
   "ruff>=0.5",

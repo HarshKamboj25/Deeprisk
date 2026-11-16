@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  font-family: 'DM Sans', sans-serif;
+  color: #edf3ff;
+  background: #070d1b;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --bg: #070d1b;
+  --panel: #101a2d;
+  --panel-raised: #15233a;
+  --border: rgba(100, 151, 218, .15);
+  --border-strong: rgba(100, 151, 218, .25);
+  --text: #edf3ff;
+  --muted: #a1b3cf;
+  --dim: #7186a7;
+  --teal: #75c9e8;
+  --blue: #729cf0;
+  --red: #e47e83;
+  --green: #79b99d;
+  --mono: 'DM Mono', monospace;
+  --heading: 'Space Grotesk', sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+::selection { background: rgba(117, 201, 232, .25); color: white; }

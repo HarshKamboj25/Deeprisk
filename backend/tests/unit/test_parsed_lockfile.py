@@ -254,6 +254,19 @@ def test_requested_range_must_be_a_string() -> None:
         parse_lockfile(text)
 
 
+def test_long_dependency_name_is_bounded_in_error_message() -> None:
+    long_name = "a" * 100_000
+    text = lockfile({}, {"node_modules/a": pkg(dependencies={long_name: 1})})
+
+    with pytest.raises(LockfileParseError) as exc_info:
+        parse_lockfile(text)
+
+    message = str(exc_info.value)
+    assert len(message) < 200
+    assert "..." in message
+    assert "must be a string" in message
+
+
 def test_empty_dependency_name_is_rejected() -> None:
     text = lockfile({"dependencies": {"": "^1.0.0"}}, {})
 

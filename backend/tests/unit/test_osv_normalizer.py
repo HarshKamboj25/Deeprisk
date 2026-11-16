@@ -91,3 +91,49 @@ def test_normalizes_captured_osv_advisory() -> None:
     assert result.aliases == ("CVE-2021-23337",)
     assert result.severity is AdvisorySeverity.HIGH
     assert result.cvss_score is None
+
+
+def test_normalizes_advisory_remediation_evidence() -> None:
+    advisory = make_advisory(
+        affected=[
+            {
+                "package": {"ecosystem": "npm", "name": "lodash"},
+                "ranges": [
+                    {
+                        "type": "SEMVER",
+                        "events": [
+                            {"introduced": "0"},
+                            {"fixed": "4.17.21"},
+                            {"introduced": "5.0.0"},
+                            {"fixed": "5.0.2"},
+                        ],
+                    }
+                ],
+            },
+            {
+                "package": {"ecosystem": "npm", "name": "other-package"},
+                "ranges": [
+                    {
+                        "type": "SEMVER",
+                        "events": [{"introduced": "0"}],
+                    }
+                ],
+            },
+        ]
+    )
+
+    result = normalize_osv_advisory(advisory)
+
+    lodash = next(item for item in result.remediations if item.package_name == "lodash")
+    unknown = next(item for item in result.remediations if item.package_name == "other-package")
+
+    assert lodash.fixed_versions == ("4.17.21", "5.0.2")
+    assert lodash.status == "available"
+    assert unknown.fixed_versions == ()
+    assert unknown.status == "unknown"
+
+
+def test_advisory_without_affected_packages_has_no_package_remediation() -> None:
+    result = normalize_osv_advisory(make_advisory(affected=[]))
+
+    assert result.remediations == ()

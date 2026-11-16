@@ -324,3 +324,42 @@ def test_invalid_advisory_ids_are_rejected_before_request(
                 await OSVClient(client=http).get_advisory(advisory_id)
 
     asyncio.run(run())
+
+def test_large_candidate_list_is_split_into_batches() -> None:
+    import json
+
+    batch_sizes: list[int] = []
+
+    candidates = [
+        RegistryQueryCandidate(
+            package_name=f"package-{index}",
+            package_version="1.0.0",
+            install_paths=(f"node_modules/package-{index}",),
+        )
+        for index in range(1001)
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        queries = payload["queries"]
+
+        batch_sizes.append(len(queries))
+
+        assert len(queries) <= 500
+
+        return httpx.Response(
+            200,
+            json={"results": [{"vulns": []} for _ in queries]},
+        )
+
+    async def run() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as http:
+            result = await OSVClient(client=http).query_batch(candidates)
+
+        assert len(result.results) == 1001
+
+    asyncio.run(run())
+
+    assert batch_sizes == [500, 500, 1]

@@ -140,7 +140,7 @@ def _read_declared_dependencies(
                 raise LockfileParseError(f"{label} field {field!r} has an invalid dependency name")
             if not isinstance(requested_range, str):
                 raise LockfileParseError(
-                    f"{label} range for {name!r} in {field!r} must be a string"
+                    f"{label} range for {_describe(name)} in {field!r} must be a string"
                 )
 
             declared.append(
@@ -189,8 +189,162 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def parse_lockfile(content: str, limits: ParseLimits = DEFAULT_PARSE_LIMITS) -> ParsedLockfile:
-    """Parse an npm lockfile v2 or v3 into nodes and declared dependencies."""
+
+def _parse_v1_lockfile(
+    data: Mapping[str, Any],
+    limits: ParseLimits,
+    manifest_content: str | None,
+) -> ParsedLockfile:
+    """Parse the nested dependency tree used by npm lockfile v1."""
+    dependencies = data.get("dependencies", {})
+    if dependencies is None:
+        dependencies = {}
+    if not isinstance(dependencies, Mapping):
+        raise LockfileParseError("npm v1 lockfile dependencies must be an object")
+
+    root_dependencies: tuple[DeclaredDependency, ...]
+    if manifest_content is not None:
+        if len(manifest_content) > limits.max_characters:
+            raise LockfileParseError("package.json exceeds the character limit")
+        try:
+            manifest = json.loads(manifest_content, object_pairs_hook=_reject_duplicate_keys)
+        except (json.JSONDecodeError, RecursionError) as exc:
+            raise LockfileParseError("Invalid or deeply nested package.json") from exc
+        if not isinstance(manifest, Mapping):
+            raise LockfileParseError("package.json root must be a JSON object")
+        root_dependencies = _read_declared_dependencies(
+            "Manifest", manifest, _ROOT_DEPENDENCY_FIELDS
+        )
+    else:
+        # Without a manifest, top-level lockfile entries are only best-effort roots.
+        fallback: list[DeclaredDependency] = []
+        for name, entry in dependencies.items():
+            if not isinstance(name, str) or not _is_valid_package_name(name):
+                raise LockfileParseError("Invalid top-level dependency name in npm v1 lockfile")
+            if not isinstance(entry, Mapping):
+                raise LockfileParseError(f"Package entry must be an object: {name}")
+            version = entry.get("version")
+            fallback.append(
+                DeclaredDependency(
+                    name=name,
+                    requested_range=version if isinstance(version, str) else "*",
+                    scope=DependencyScope.UNKNOWN,
+                )
+            )
+        root_dependencies = tuple(sorted(fallback, key=lambda item: item.name))
+
+    direct_scopes: dict[str, set[DependencyScope]] = {}
+    for declared in root_dependencies:
+        direct_scopes.setdefault(declared.name, set()).add(declared.scope)
+
+    nodes: list[DependencyNode] = []
+    seen_paths: set[str] = set()
+    stack: list[tuple[str, Mapping[str, Any]]] = [
+        (f"node_modules/{name}", entry)
+        for name, entry in reversed(list(dependencies.items()))
+        if isinstance(name, str) and isinstance(entry, Mapping)
+    ]
+
+    if len(dependencies) > limits.max_packages:
+        raise LockfileParseError(f"Lockfile exceeds the package limit ({limits.max_packages})")
+
+    while stack:
+        install_path, entry = stack.pop()
+        path_names = _package_names_in_path(install_path, limits)
+
+        if install_path in seen_paths:
+            raise LockfileParseError(f"Duplicate package installation path: {install_path}")
+        seen_paths.add(install_path)
+
+        if len(seen_paths) > limits.max_packages:
+            raise LockfileParseError(f"Lockfile exceeds the package limit ({limits.max_packages})")
+
+        name = path_names[-1]
+        version = entry.get("version")
+        if not isinstance(version, str) or not version:
+            raise LockfileParseError(f"Missing package version: {install_path}")
+
+        requires = entry.get("requires", {})
+        if not isinstance(requires, Mapping):
+            raise LockfileParseError(f"Invalid requires metadata: {install_path}")
+
+        declared_dependencies: list[DeclaredDependency] = []
+        for child_name, requested_range in requires.items():
+            if not isinstance(child_name, str) or not _is_valid_package_name(child_name):
+                raise LockfileParseError(f"Invalid required dependency name: {install_path}")
+            if not isinstance(requested_range, str):
+                raise LockfileParseError(f"Invalid required dependency range: {install_path}")
+            declared_dependencies.append(
+                DeclaredDependency(
+                    name=child_name,
+                    requested_range=requested_range,
+                    scope=DependencyScope.PRODUCTION,
+                )
+            )
+
+        scopes = (
+            set(direct_scopes.get(name, set()))
+            if "/node_modules/" not in install_path
+            else set()
+        )
+
+        if entry.get("dev") is True:
+            scopes.add(DependencyScope.DEVELOPMENT)
+        if entry.get("optional") is True:
+            scopes.add(DependencyScope.OPTIONAL)
+
+        resolved = entry.get("resolved")
+        integrity = entry.get("integrity")
+        has_install_script = entry.get("hasInstallScript", False)
+        if resolved is not None and not isinstance(resolved, str):
+            raise LockfileParseError(f"Invalid resolved metadata: {install_path}")
+        if integrity is not None and not isinstance(integrity, str):
+            raise LockfileParseError(f"Invalid integrity metadata: {install_path}")
+        if not isinstance(has_install_script, bool):
+            raise LockfileParseError(f"Invalid hasInstallScript metadata: {install_path}")
+
+        nodes.append(
+            DependencyNode(
+                install_path=install_path,
+                name=name,
+                version=version,
+                scopes=frozenset(scopes),
+                is_direct="/node_modules/" not in install_path and name in direct_scopes,
+                is_dev=_is_development_only(scopes),
+                declared_dependencies=tuple(
+                    sorted(declared_dependencies, key=lambda item: item.name)
+                ),
+                source_type=classify_package_source(resolved),
+                resolved=resolved,
+                integrity=integrity,
+                has_install_script=has_install_script,
+            )
+        )
+
+        children = entry.get("dependencies", {})
+        if not isinstance(children, Mapping):
+            raise LockfileParseError(f"Invalid nested dependencies: {install_path}")
+        for child_name, child_entry in reversed(list(children.items())):
+            if not isinstance(child_name, str) or not _is_valid_package_name(child_name):
+                raise LockfileParseError(f"Invalid nested package name: {install_path}")
+            if not isinstance(child_entry, Mapping):
+                raise LockfileParseError(f"Package entry must be an object: {install_path}")
+            child_path = f"{install_path}/node_modules/{child_name}"
+            stack.append((child_path, child_entry))
+
+    return ParsedLockfile(
+        nodes=tuple(sorted(nodes, key=lambda node: node.install_path)),
+        root_dependencies=root_dependencies,
+    )
+
+
+def parse_lockfile(
+    content: str,
+    limits: ParseLimits = DEFAULT_PARSE_LIMITS,
+    *,
+    manifest_content: str | None = None,
+) -> ParsedLockfile:
+    """Parse npm lockfiles v1, v2 and v3 into nodes and declared dependencies."""
     if len(content) > limits.max_characters:
         raise LockfileParseError(f"Lockfile exceeds the character limit ({limits.max_characters})")
     try:
@@ -204,9 +358,12 @@ def parse_lockfile(content: str, limits: ParseLimits = DEFAULT_PARSE_LIMITS) -> 
         raise LockfileParseError("Lockfile root must be a JSON object")
 
     lockfile_version = data.get("lockfileVersion")
+    if lockfile_version == 1:
+        return _parse_v1_lockfile(data, limits, manifest_content)
+
     if lockfile_version not in (2, 3):
         raise LockfileParseError(
-            f"Unsupported lockfileVersion: {lockfile_version!r}; expected 2 or 3"
+            f"Unsupported lockfileVersion: {_describe(str(lockfile_version))}; expected 1, 2 or 3"
         )
 
     packages = data.get("packages")
@@ -220,6 +377,14 @@ def parse_lockfile(content: str, limits: ParseLimits = DEFAULT_PARSE_LIMITS) -> 
     root = packages[""]
     if not isinstance(root, Mapping):
         raise LockfileParseError("Root package entry must be an object")
+
+    # Reject npm workspace links before validating installation paths.
+    # This makes rejection independent of JSON object entry order.
+    for install_path, entry in packages.items():
+        if install_path and isinstance(entry, Mapping) and entry.get("link") is True:
+            raise LockfileParseError(
+                f"Linked package entries are not supported yet: {install_path}"
+            )
 
     root_dependencies = _read_declared_dependencies("Root", root, _ROOT_DEPENDENCY_FIELDS)
 
