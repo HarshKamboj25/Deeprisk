@@ -2,7 +2,7 @@
 
 <img src="frontend/public/deeprisk-crystal-emblem.png" width="145" alt="Deep Risk Crystal Logo">
 
-<img src="docs/assets/hero-animation.svg" width="100%" alt="Deep Risk Animated Hero">
+<img src="docs/assets/deep-risk-animated-hero.gif" width="100%" alt="Deep Risk Animated Hero">
 
 <br>
 
@@ -203,4 +203,5 @@ A license has not yet been specified. All rights reserved unless a license is ad
 [Live Application](https://deeprisk-frontend.onrender.com) · [API Documentation](https://deeprisk.onrender.com/docs)
 
 </div>
+
 
