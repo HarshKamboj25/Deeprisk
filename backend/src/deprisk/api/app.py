@@ -1,5 +1,6 @@
 """FastAPI application entry point for DepRisk."""
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     worker_pool = ScanWorkerPool(
         partial(execute_scan_job, session_factory),
+        worker_count=int(os.getenv("DEPRISK_WORKER_COUNT", "2")),
     )
     app.state.worker_pool = worker_pool
 
@@ -58,6 +60,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        origin.strip()
+        for origin in os.getenv("DEPRISK_CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ] + [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
